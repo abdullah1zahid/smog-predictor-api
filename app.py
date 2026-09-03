@@ -1,5 +1,6 @@
 import os
 import datetime
+import pytz  # NAYA IMPORT - timezone handle karne ke liye
 import requests
 import joblib
 import pandas as pd
@@ -17,14 +18,12 @@ app.add_middleware(
 )
 
 MODEL_PATH = "aqi_model.pkl" if os.path.exists("aqi_model.pkl") else "lahore_smog_predictor_lgb.pkl"
-
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
 else:
     raise FileNotFoundError(f"Model file '{MODEL_PATH}' not found in the directory!")
 
 CSV_PATH = "lahore-us embassy, pakistan-air-quality.csv"
-
 if os.path.exists(CSV_PATH):
     recent_df = pd.read_csv(CSV_PATH)
     recent_df.columns = recent_df.columns.str.strip().str.lower()
@@ -37,6 +36,9 @@ else:
     recent_values = np.array([45.0, 50.0, 42.0, 38.0, 40.0, 35.0, 34.0])
 
 API_TOKEN = "aa135a1e3762b8aea87354ef5e90b19c73b85b14"
+
+# NAYI LINE - Pakistan timezone define kar rahe hain (server ki UTC clock ki bajaye)
+PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
 
 feature_cols = [
     'pm25_lag1', 'pm25_lag2', 'pm25_lag3', 
@@ -83,9 +85,10 @@ def predict_tomorrow():
     if current_pm25 is None:
         current_pm25 = res["data"]["aqi"]
 
-    today = datetime.datetime.now()
+    # YEH LINE BADLI HAI - ab Pakistan ke waqt se "aaj" nikal rahe hain, server ki UTC se nahi
+    today = datetime.datetime.now(PAKISTAN_TZ)
     tomorrow = today + datetime.timedelta(days=1)
-    
+
     input_data = {
         'pm25_lag1': float(current_pm25),
         'pm25_lag2': float(recent_values[-1]),
@@ -97,7 +100,6 @@ def predict_tomorrow():
     }
 
     df_input = pd.DataFrame([input_data])[feature_cols]
-
     predicted_pm25 = float(model.predict(df_input)[0])
     category, color, advice = get_aqi_category(predicted_pm25)
 
